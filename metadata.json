@@ -1,0 +1,9 @@
+{
+  "name": "Tracport - Inspection & Verification Platform",
+  "description": "Tracport: Smart real-time monitoring and inspection platform for MoSJE (SIH 2026 Problem 95) by Erudites.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
