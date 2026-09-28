@@ -15,10 +15,13 @@ import {
   Building2,
   User,
   UserCheck,
-  FileCheck
+  FileCheck,
+  Download,
+  HardDrive
 } from 'lucide-react';
 import { InspectionReport, InspectionCondition } from '../types';
 import { getLocalGeographicLocation } from '../utils/imageProcessing';
+import { downloadReportToDeviceFile } from '../utils/deviceStorage';
 
 interface ReportDetailModalProps {
   report: InspectionReport;

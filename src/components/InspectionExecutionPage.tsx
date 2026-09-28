@@ -673,7 +673,7 @@ export const InspectionExecutionPage: React.FC<InspectionExecutionPageProps> = (
             className="w-full py-4 px-6 bg-white hover:bg-blue-50 active:scale-[0.99] text-blue-700 hover:text-blue-900 border-2 border-dashed border-blue-300 hover:border-blue-400 font-bold text-sm sm:text-base rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer"
           >
             <Plus className="w-5 h-5 text-blue-600" />
-            <span>+ Add another Inspection</span>
+            <span>Add another Inspection</span>
           </button>
 
           {/* ========================================================

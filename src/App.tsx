@@ -13,22 +13,52 @@ export default function App() {
   // App view state: 'splash' -> 'login' -> 'portal'
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'portal'>('splash');
   
-  // Active logged-in inspector
-  const [currentInspector, setCurrentInspector] = useState<InspectorUser | null>(null);
+  // Active logged-in inspector (with persistence for mobile app usage)
+  const [currentInspector, setCurrentInspector] = useState<InspectorUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('tracport_current_inspector');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Forgot password modal
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
-  // Network offline/online simulation state
-  const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [pendingSyncReports, setPendingSyncReports] = useState<InspectionReport[]>([]);
+  // Network offline/online simulation & device state
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+  const [pendingSyncReports, setPendingSyncReports] = useState<InspectionReport[]>(() => {
+    try {
+      const saved = localStorage.getItem('tracport_pending_sync');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
 
-  // Institutions state
-  const [institutions, setInstitutions] = useState<Institution[]>(INITIAL_INSTITUTIONS);
+  // Institutions state (persisted locally so status updates remain on phone)
+  const [institutions, setInstitutions] = useState<Institution[]>(() => {
+    try {
+      const saved = localStorage.getItem('tracport_institutions');
+      return saved ? JSON.parse(saved) : INITIAL_INSTITUTIONS;
+    } catch {
+      return INITIAL_INSTITUTIONS;
+    }
+  });
 
-  // Completed reports history
-  const [submittedReports, setSubmittedReports] = useState<InspectionReport[]>([]);
+  // Completed reports history (persisted in phone storage)
+  const [submittedReports, setSubmittedReports] = useState<InspectionReport[]>(() => {
+    try {
+      const saved = localStorage.getItem('tracport_submitted_reports');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Active ongoing inspection modal
   const [activeInspectionInstitution, setActiveInspectionInstitution] = useState<Institution | null>(null);
@@ -36,9 +66,75 @@ export default function App() {
   // Viewing report details modal
   const [viewingReport, setViewingReport] = useState<InspectionReport | null>(null);
 
-  // Splash complete -> Show Login Screen
+  // Listen to native device online/offline events (phone switching to airplane mode or wifi)
+  useEffect(() => {
+    const handleDeviceOnline = () => {
+      setIsOnline(true);
+      // Auto-sync pending reports if any
+      setPendingSyncReports((pending) => {
+        if (pending.length > 0) {
+          setSyncToastMessage(`Device back online. Synced ${pending.length} offline report${pending.length > 1 ? 's' : ''} to MoSJE servers.`);
+          setTimeout(() => setSyncToastMessage(null), 4000);
+          try {
+            localStorage.removeItem('tracport_pending_sync');
+          } catch {}
+          return [];
+        }
+        return pending;
+      });
+    };
+
+    const handleDeviceOffline = () => {
+      setIsOnline(false);
+      setSyncToastMessage('Device is currently offline. Inspections will be safely cached locally.');
+      setTimeout(() => setSyncToastMessage(null), 3500);
+    };
+
+    window.addEventListener('online', handleDeviceOnline);
+    window.addEventListener('offline', handleDeviceOffline);
+
+    return () => {
+      window.removeEventListener('online', handleDeviceOnline);
+      window.removeEventListener('offline', handleDeviceOffline);
+    };
+  }, []);
+
+  // Save changes to localStorage for offline robustness
+  useEffect(() => {
+    try {
+      localStorage.setItem('tracport_institutions', JSON.stringify(institutions));
+    } catch {}
+  }, [institutions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tracport_submitted_reports', JSON.stringify(submittedReports));
+    } catch {}
+  }, [submittedReports]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tracport_pending_sync', JSON.stringify(pendingSyncReports));
+    } catch {}
+  }, [pendingSyncReports]);
+
+  useEffect(() => {
+    try {
+      if (currentInspector) {
+        localStorage.setItem('tracport_current_inspector', JSON.stringify(currentInspector));
+      } else {
+        localStorage.removeItem('tracport_current_inspector');
+      }
+    } catch {}
+  }, [currentInspector]);
+
+  // Splash complete -> Show Login Screen (or directly portal if session active)
   const handleSplashComplete = () => {
-    setCurrentView('login');
+    if (currentInspector) {
+      setCurrentView('portal');
+    } else {
+      setCurrentView('login');
+    }
   };
 
   // Login handler
@@ -53,9 +149,20 @@ export default function App() {
     setCurrentView('login');
   };
 
-  // Toggle network connectivity (Online / Offline)
+  // Toggle network connectivity (Online / Offline simulation)
   const handleToggleOnline = () => {
-    setIsOnline((prev) => !prev);
+    setIsOnline((prev) => {
+      const next = !prev;
+      if (next && pendingSyncReports.length > 0) {
+        setSyncToastMessage(`Synced ${pendingSyncReports.length} offline report${pendingSyncReports.length > 1 ? 's' : ''} to MoSJE servers.`);
+        setTimeout(() => setSyncToastMessage(null), 3500);
+        setPendingSyncReports([]);
+        try {
+          localStorage.removeItem('tracport_pending_sync');
+        } catch {}
+      }
+      return next;
+    });
   };
 
   // Handle report submission

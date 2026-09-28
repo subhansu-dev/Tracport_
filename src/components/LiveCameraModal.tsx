@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, X, RefreshCw, AlertCircle, Sparkles, ShieldCheck, FlipHorizontal } from 'lucide-react';
+import { Camera, X, RefreshCw, AlertCircle, Sparkles, ShieldCheck, FlipHorizontal, Smartphone } from 'lucide-react';
 import { 
   GeotagInfo, 
   getCurrentFormattedDate, 
@@ -39,6 +39,7 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const nativeFileInputRef = useRef<HTMLInputElement | null>(null);
   
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -240,6 +241,64 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   };
 
+  // Common Geotagging & Watermarking processor for both WebRTC stream and Native Android Camera
+  const processCapturedPhoto = (rawDataUrl: string) => {
+    try {
+      // Geotag contains only real current location, pincode, GPS, date and time
+      let cleanArea = currentLocation.areaName;
+      let cleanPin = currentLocation.pincode;
+      if (!cleanArea || cleanArea.includes('Detecting') || cleanArea.includes('Locating')) {
+        const fallback = getLocalGeographicLocation(currentGps.lat, currentGps.lng);
+        cleanArea = fallback.areaName;
+        cleanPin = cleanPin || fallback.pincode;
+      }
+
+      const geotag: GeotagInfo = {
+        latitude: currentGps.lat,
+        longitude: currentGps.lng,
+        areaName: cleanArea,
+        pincode: cleanPin || '',
+        date: getCurrentFormattedDate(),
+        time: getCurrentFormattedTime(),
+        watermarkTitle: watermarkTitle || 'MoSJE Field Inspection',
+        sealText: sealText || (watermarkTitle?.includes('Officer') ? '✓ OFFICER VERIFIED' : '✓ TAMPER-VERIFIED')
+      };
+
+      stopCamera();
+      // Send raw photo to parent -> parent opens PhotoEditorDialog immediately!
+      onCapture(rawDataUrl, geotag);
+    } catch (err) {
+      console.error('Failed to process photo:', err);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle native Android camera capture (WebIntoApp APK fallback)
+  const handleNativeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        processCapturedPhoto(result);
+      } else {
+        setIsProcessing(false);
+      }
+    };
+    reader.onerror = () => {
+      setIsProcessing(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleTriggerNativeCamera = () => {
+    nativeFileInputRef.current?.click();
+  };
+
   // Capture photo from live video
   const handleSnapPhoto = () => {
     if (isProcessing) return;
@@ -298,32 +357,9 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
         }
       }
 
-      // Geotag contains only real current location, pincode, GPS, date and time
-      let cleanArea = currentLocation.areaName;
-      let cleanPin = currentLocation.pincode;
-      if (!cleanArea || cleanArea.includes('Detecting') || cleanArea.includes('Locating')) {
-        const fallback = getLocalGeographicLocation(currentGps.lat, currentGps.lng);
-        cleanArea = fallback.areaName;
-        cleanPin = cleanPin || fallback.pincode;
-      }
-
-      const geotag: GeotagInfo = {
-        latitude: currentGps.lat,
-        longitude: currentGps.lng,
-        areaName: cleanArea,
-        pincode: cleanPin || '',
-        date: getCurrentFormattedDate(),
-        time: getCurrentFormattedTime(),
-        watermarkTitle: watermarkTitle || 'MoSJE Field Inspection',
-        sealText: sealText || (watermarkTitle?.includes('Officer') ? '✓ OFFICER VERIFIED' : '✓ TAMPER-VERIFIED')
-      };
-
-      stopCamera();
-      // Send raw photo to parent -> parent opens PhotoEditorDialog immediately!
-      onCapture(rawDataUrl, geotag);
+      processCapturedPhoto(rawDataUrl);
     } catch (err) {
       console.error('Failed to capture:', err);
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -392,13 +428,21 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
               </div>
 
               {cameraError ? (
-                <div className="max-w-md space-y-2">
+                <div className="max-w-md space-y-3">
                   <p className="text-xs text-amber-300 font-medium px-4 py-2 bg-amber-950/40 rounded-xl border border-amber-800">
                     {cameraError}
                   </p>
                   <p className="text-[11px] text-zinc-400">
-                    You can still capture an authentic inspection photo using the button below or device camera.
+                    Use your phone's native camera app below. It will automatically apply the MoSJE geotag, location & tamper-verification stamp.
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleTriggerNativeCamera}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg inline-flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Open Phone Camera App</span>
+                  </button>
                 </div>
               ) : (
                 <div className="text-xs text-zinc-300">
@@ -442,16 +486,40 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
           </div>
 
           <canvas ref={canvasRef} className="hidden" />
+
+          {/* Hidden native input for mobile Android WebView camera intent */}
+          <input
+            ref={nativeFileInputRef}
+            type="file"
+            accept="image/*"
+            capture={facingMode === 'user' ? 'user' : 'environment'}
+            onChange={handleNativeFileChange}
+            className="hidden"
+          />
         </div>
 
         {/* Bottom Shutter Action Bar */}
-        <div className="p-4 sm:p-5 bg-black/90 border-t border-zinc-800 flex items-center justify-center">
+        <div className="p-4 sm:p-5 bg-black/90 border-t border-zinc-800 flex items-center justify-between px-6 sm:px-12">
+          {/* Native Phone Camera Option */}
+          <button
+            type="button"
+            onClick={handleTriggerNativeCamera}
+            disabled={isProcessing}
+            className="flex flex-col items-center gap-1 text-zinc-400 hover:text-white transition-colors cursor-pointer active:scale-95 text-center min-w-[70px]"
+            title="Launch Phone Camera (WebIntoApp fallback)"
+          >
+            <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
+              <Smartphone className="w-5 h-5 text-blue-400" />
+            </div>
+            <span className="text-[10px] font-medium">Device Cam</span>
+          </button>
+
           {/* Big Shutter Button */}
           <button
             type="button"
             onClick={handleSnapPhoto}
             disabled={isProcessing}
-            className="group relative flex items-center justify-center cursor-pointer transition-transform active:scale-95 mx-auto"
+            className="group relative flex items-center justify-center cursor-pointer transition-transform active:scale-95"
             aria-label="Capture Photo"
           >
             <div className="w-18 h-18 rounded-full border-4 border-white/80 group-hover:border-white flex items-center justify-center shadow-xl shadow-blue-500/20">
@@ -463,6 +531,20 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
                 )}
               </div>
             </div>
+          </button>
+
+          {/* Flip Camera Option */}
+          <button
+            type="button"
+            onClick={handleToggleFacingMode}
+            disabled={isProcessing}
+            className="flex flex-col items-center gap-1 text-zinc-400 hover:text-white transition-colors cursor-pointer active:scale-95 text-center min-w-[70px]"
+            title="Switch Front/Rear Camera"
+          >
+            <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
+              <FlipHorizontal className="w-5 h-5 text-zinc-300" />
+            </div>
+            <span className="text-[10px] font-medium">{facingMode === 'user' ? 'Front' : 'Rear'}</span>
           </button>
         </div>
 
