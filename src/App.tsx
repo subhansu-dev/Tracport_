@@ -70,11 +70,9 @@ export default function App() {
   useEffect(() => {
     const handleDeviceOnline = () => {
       setIsOnline(true);
-      // Auto-sync pending reports if any
+      // Auto-sync pending reports seamlessly
       setPendingSyncReports((pending) => {
         if (pending.length > 0) {
-          setSyncToastMessage(`Device back online. Synced ${pending.length} offline report${pending.length > 1 ? 's' : ''} to MoSJE servers.`);
-          setTimeout(() => setSyncToastMessage(null), 4000);
           try {
             localStorage.removeItem('tracport_pending_sync');
           } catch {}
@@ -86,8 +84,6 @@ export default function App() {
 
     const handleDeviceOffline = () => {
       setIsOnline(false);
-      setSyncToastMessage('Device is currently offline. Inspections will be safely cached locally.');
-      setTimeout(() => setSyncToastMessage(null), 3500);
     };
 
     window.addEventListener('online', handleDeviceOnline);
@@ -149,13 +145,11 @@ export default function App() {
     setCurrentView('login');
   };
 
-  // Toggle network connectivity (Online / Offline simulation)
+  // Toggle network connectivity (Online / Offline)
   const handleToggleOnline = () => {
     setIsOnline((prev) => {
       const next = !prev;
       if (next && pendingSyncReports.length > 0) {
-        setSyncToastMessage(`Synced ${pendingSyncReports.length} offline report${pendingSyncReports.length > 1 ? 's' : ''} to MoSJE servers.`);
-        setTimeout(() => setSyncToastMessage(null), 3500);
         setPendingSyncReports([]);
         try {
           localStorage.removeItem('tracport_pending_sync');
@@ -185,10 +179,9 @@ export default function App() {
 
     if (!isOnline) {
       setPendingSyncReports((prev) => [...prev, report]);
-      setSyncToastMessage('Report saved in offline mode. Will auto-sync when online.');
-    } else {
-      setSyncToastMessage('Inspection submitted successfully!');
     }
+    
+    setSyncToastMessage('Inspection submitted successfully!');
     setTimeout(() => setSyncToastMessage(null), 3500);
 
     setActiveInspectionInstitution(null);

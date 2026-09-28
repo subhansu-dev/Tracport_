@@ -353,7 +353,7 @@ export const InspectionExecutionPage: React.FC<InspectionExecutionPageProps> = (
             <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
               isOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-rose-50 text-rose-700 border-rose-300'
             }`}>
-              {isOnline ? 'Online' : 'Offline Mode'}
+              {isOnline ? 'Online' : 'Offline'}
             </span>
 
             <button
